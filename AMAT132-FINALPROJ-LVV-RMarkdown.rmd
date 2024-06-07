@@ -1,0 +1,670 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+---
+```{=html}
+<style type="text/css">
+body {
+  font-family: 'Times New Roman', Times, serif;
+  line-height: 1.5;
+  margin: 1in;
+  font-size: 12pt;
+  text-align: justify;
+}
+
+p, li {
+  font-family: 'Times New Roman', Times, serif;
+  font-size: 12pt;
+  line-height: 1.5;
+  text-align: justify;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Times New Roman', Times, serif;
+}
+
+h1.title{
+  text-align: center;
+}
+
+h4.author{
+  text-align: center;
+}
+
+h4.date{
+  text-align: center;
+}
+
+p.caption {
+  text-align: center;
+}
+</style>
+```
+---
+title: "Forecasting Monthly Natural Gas Prices in the US through Various Forecasting Techniques"
+author: "Jana Patricia Lumontod | Melyssa Villaflores | Nicole Kyte Villamor"
+date: "2024-06-07"
+output: html_document
+---
+
+```{r include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
+```
+
+# 1 \| Introduction
+
+Natural gas is a crucial source of energy and is increasingly being recognized as a cleaner alternative to coal and oil for electricity generation in many countries [1]. In addition, it is widely used in homes for cooking and heating purposes and is an important fuel in industrial processes. As such, it would be greatly beneficial for stakeholders, the energy sector, policymakers, and consumers for an effective approach for forecasting natural gas prices to be developed. It could help in making informed decisions, managing business risks, and optimizing industrial operations. 
+
+Forecasting natural gas prices, however, poses several challenges and complexities. One of its main difficulties lies in the volatility of natural gas markets, which is influenced by factors such as geopolitical events, weather patterns (temperatures), economic conditions and other external factors affecting its supply and demand [2]. In the context of the Philippines, the challenge is made harder by the limited availability of records, which only cover less than a decade of data. Therefore, this project will mainly focus on exploring univariate time-series forecasting models, leveraging available historical data from the U.S. on natural gas prices.
+
+Specifically, the project will explore and compare several types of time-series forecasting models, namely: a naïve model, exponential smoothing models, and the Autoregressive Integrated Moving-Average (ARIMA) model. Given the lack of local records, it will instead make use of U.S. data from January 1997 to August 2020, sourced from the U.S. Energy Information Administration (EIA), which recorded nominal monthly natural gas prices in dollars per million British thermal units (MMBtu). The results from this analysis aim to give insight into the dynamics of natural gas prices, and a foundation for forecasting methods that can be adapted to local Philippine data once it becomes more available. 
+
+## 1.1 \| Objectives
+
+The objective of this study is to apply naïve forecasting, exponential smoothing, and ARIMA models to forecast monthly natural gas prices using data from the US and compare their performances to determine which model is better. The data will be split into the training set and test set, and the latter will be used to measure the model's accuracy and determine which model is best.
+
+## 1.2 \| Scope and Delimitations
+
+This study focuses on utilizing univariate time-series forecasting models in order to analyze data on monthly U.S. natural gas prices from January 1997 to December 2019. Thus, this study does not aim to explore multivariate and explanatory forecasting models. Furthermore, in order to more efficiently build a robust forecasting model, a U.S. dataset is used due to the abundance of readily available U.S.records. As such, this study's methods will be focusing on working with U.S. data as a starting point for model development. Future studies may expand and explore on the application of the model to local contexts once data on natural gas prices becomes available.
+
+## 1.3 \| Significance
+
+Forecasting accurate prices of natural gas is significant for several reasons. First, this study may aid the government agencies in formulating policies and economic planning. Businesses can use this study for budgeting, investing, and in managing the cost of production. Second, accurate forecasts may benefit the consumers from financial planning and properly budgeting their energy expenses. Hence, the findings of this study provide significant insights that may be used for decision-making in various fields. 
+
+# 2 \| Methods
+
+Data on gas prices was downloaded through [Kaggle](https://www.kaggle.com/datasets/joebeachcapital/natural-gas-prices), an online repository. The chosen dataset contained monthly records of natural gas prices in the United States of America (USA). The prices were measured in nominal US Dollars (USD), and the data spanned from January 1997 to August 2020.
+
+## 2.1 \| Data preprocessing
+
+The dataset was made available using a .csv file, consisting of natural gas prices per month-year.
+
+```{r message=FALSE}
+library(fpp2) #for plotting time series
+library(stlplus) #for ts decomposition
+library(tidyverse) #for processing Excel files 
+library(tseries) #for ts functions
+
+# Importing .csv file data as time series
+raw <- read.csv("monthly_csv.csv")
+gas.ts <- ts(raw$Price, frequency=12, start=c(1997, 01), end=c(2019,12))
+autoplot(gas.ts, ylab="Price ($ per MMBtu)") +
+  ggtitle("Monthly Natural Gas Prices in the US")
+
+# Splitting data into training set (18 years; 216 months)
+# and test set (5 years; 60 months)
+training.set <- subset(gas.ts, end=216)
+test.set <- subset(gas.ts, start=217)
+```
+
+The dataset contained a total of 284 data points, and the dates were recorded in the format YYYY-mm. Due to the incomplete data in 2020 where records were only available until August 2020, the last 8 data points were removed from the time series altogether, reducing the number of data points to 276. The data was then split into two sets: the training set with 216 data points from January 1997 to December 2014, and the test set with 60 data points from January 2015 to December 2019. An assumption was made regarding the data spike somewhere between 2003 and 2013, where these points were not considered as outliers but rather explainable by real-world events. Thus, the authors proceeded with the time series analysis.
+
+## 2.2 \| Feature construction and selection
+
+Based on the plot shown above, the data suggests non-stationarity due to the distinct peaking trend observed between 2003 to 2013. Furthermore, there seems to be no distinct seasonality or cycles.
+
+For a more detailed analysis, the time series was plotted using a seasonal plot and decomposed using the `stlplus()` function in R.
+
+```{r}
+# Seasonal plot for inspecting seasonality
+ggseasonplot(gas.ts) + 
+  ggtitle("Seasonal plot of time series") +
+  ylab("Price ($ per MMBtu)")
+
+# STL decomposition to inspect trend and seasonality
+gas.stl <- stlplus(gas.ts, s.window = "period")
+plot(gas.stl, main="STL decomposition of time series")
+# Weak seasonality, non-monotonic trend
+```
+
+The seasonal plot indicates little to no seasonality due to the absence of identifiable monthly patterns. This is supported by the STL decomposition plot, which shows very weak seasonality and a non-monotonic trend.
+
+## 2.3 \| Model training
+
+Four (4) major forecasting methods were chosen to be applied to the data: (a) Naïve forecasting, (b) Exponential smoothing, (c) ARIMA models, and (d) Holt's methods. For all methods, the models were trained using the data in `training.set`, and the forecasting horizon was set to `h=60`, corresponding to the number of data points in the test set.
+
+### 2.3.a Naïve forecasting
+
+Naïve forecasting takes the most recent observation in the training set and uses it as the forecast for all future values.
+
+```{r}
+# Method 1: Naive forecast
+
+gas.naive <- naive(training.set, h=60)
+
+autoplot(training.set, series="Training set", xlab="Year", ylab="Price ($ per MMBtu)") +
+  autolayer(fitted(gas.naive),
+            series="Fitted values")
+```
+
+### 2.3.b Exponential smoothing
+
+Two methods were chosen from the exponential smoothing group: simple exponential smoothing (SES) and error-trend-seasonality (ETS) model.
+
+#### i. Simple exponential smoothing
+
+Since it was established that the data has no clear trend or seasonality pattern, simple exponential smoothing was considered as a forecasting model.
+
+```{r}
+# Method 2.a: Simple exponential smoothing
+gas.ses <- ses(training.set, h=60)
+
+# alpha = 0.9758; l_0 = 3.4192
+summary(gas.ses)
+# alpha is close to 1, thus, forecast is tending towards the naive method
+autoplot(training.set, series="Training set", xlab="Year", ylab="Price ($ per MMBtu)") +
+  autolayer(fitted(gas.ses),
+            series="Fitted values")
+```
+
+Model details gave the parameter values of `alpha = 0.9758` and initial level `l_0 = 3.4192`. The alpha value being close to 1 suggests that the SES forecast tends towards the naive method.
+
+#### ii. Error-trend-seasonality (ETS) model
+
+The ETS model type was automatically selected using the `ets()` function.
+
+```{r}
+# Method 2.b: ETS model
+gas.ets <- ets(training.set)
+
+summary(gas.ets)
+autoplot(training.set, series="Training set", xlab="Year", ylab="Price ($ per MMBtu)") +
+  autolayer(fitted(gas.ets),
+            series="Fitted values")
+```
+
+The `ets()` function selected an ETS model with multiplicative error and no trend or seasonality.
+
+### 2.3.c ARIMA models
+
+Upon inspection of the time series plot, it is apparent that the data is not (trend) stationary. Thus, the Augmented Dickey-Fuller (ADF) test and Kwiatkowski-Phillips-Schmidt-Shin (KPSS) test were used to verify non-stationarity.
+
+```{r warning=TRUE}
+# Checking stationarity using Augmented Dickey-Fuller (ADF) test
+adf.test(training.set)
+kpss.test(training.set, null="Trend")
+```
+
+Test results show that the data was not stationary, with a suggested lag order of 5 from the ADF test. First-order differencing was applied, and the differenced data was subjected to the stationarity tests.
+
+```{r warning=TRUE}
+# Suggested lag order: 5
+# Test result: non-stationary
+# Performing first-order differencing
+gas.ts.d1 <- diff(training.set, differences = 1)
+
+# ADF test result: stationary; d=1
+adf.test(gas.ts.d1)
+kpss.test(gas.ts.d1, null="Trend")
+```
+
+Test results show that the data is now stationary. Thus, the initial ARIMA models to be considered were of the order ARIMA(p,1,q). The ACF and PACF plots were inspected for possible values of p and q.
+
+```{r}
+# Checking ACF and PACF plots to determine values of p and q
+forecast::tsdisplay(gas.ts.d1)
+```
+
+Significant spikes were present at AR(5) and MA(5). Various combinations of p and q were tested, along with a trial model of AR(1) and MA(1). 
+
+```{r}
+# Testing combinations of ARIMA(p,d,q)
+
+# ACF suggests MA(5), PACF suggests AR(5)
+gas.arima.1 <- Arima(training.set, order = c(5,1,5))
+# ARIMA(5,1,5) has AICc value of 528.87
+gas.arima.1
+
+# p=5, q=1
+gas.arima.2 <- Arima(training.set, order = c(5,1,1))
+#ARIMA(5,1,1) has AICc value of 531.86
+gas.arima.2
+
+# p=1, q=5
+gas.arima.3 <- Arima(training.set, order = c(1,1,5))
+#ARIMA(1,1,5) has AICc value of 532.23
+gas.arima.3
+
+# Trial-and-error choice: p=1, q=1
+gas.arima.4 <- Arima(training.set, order = c(1,1,1))
+#ARIMA(1,1,1) has AICc value of 526.63
+gas.arima.4
+```
+
+Out of the 4 candidate ARIMA models, the model with order ARIMA(1,1,1) produced the lowest AICc score of 526.63, making it the best choice of ARIMA model. The model was fitted to the training set to visually inspect goodness-of-fit.
+
+```{r}
+# ARIMA(1,1,1) produced lowest value of AICc; Fitting model to training set
+autoplot(training.set, series="Training set", xlab="Year", ylab="Price ($ per MMBtu)") +
+  autolayer(fitted(gas.arima.4),
+            series="Fitted values")
+```
+
+Upon consultation with the adviser, the authors considered the order ARIMA(1,0,1), which suggests an ARIMA model with no differencing contrary to the results of the stationarity tests.
+
+```{r}
+# ARIMA model p=1, q=1 with no differencing as suggested by adviser
+gas.arima.5 <- Arima(training.set, order = c(1,0,1))
+#ARIMA(1,0,1) has AICc value of 531.34
+gas.arima.5
+```
+
+The AICc value is 531.34, which indicates that ARIMA(1,1,1) is still the better model. For the sake of further analysis, the ARIMA(1,0,1) model will later be used to forecast values in the test set and compared with ARIMA(1,1,1).
+
+### 2.3.d Holt's methods
+
+Holt's forecasting methods are technically under exponential smoothing, but the authors decided to separate this group because the methods incorporate trend and seasonality into the forecasts. Three methods were tested: Holt's linear trend, Holt-Winters additive, and Holt-Winters additive damped. All models were fitted to the training set to visually inspect goodness-of-fit.
+
+#### i. Holt's linear trend method
+
+This method incorporates trend into the forecasting model.
+
+```{r}
+# Method 3: Holt's linear trend method
+gas.hl <- holt(training.set, h=60)
+summary(gas.hl)
+
+# Fitting model to training set
+autoplot(training.set, series="Training set", xlab="Year", ylab="Price ($ per MMBtu)") +
+  autolayer(fitted(gas.hl),
+            series="Fitted values")
+```
+
+#### ii. Holt-Winters additive method
+
+This method incorporates trend and seasonality, setting the latter as additive since the variance of the time series does not seem to change over time.
+
+```{r}
+# Method 4: Holt-Winters' method, regular and damped
+# HW regular forecast
+gas.hwreg <- hw(training.set, seasonal = "additive", damped = FALSE, h=60)
+summary(gas.hwreg)
+
+# Fitting models to training set
+autoplot(training.set, series="Training set", xlab="Year", ylab="Price ($ per MMBtu)") +
+  autolayer(fitted(gas.hwreg),
+            series="HW fitted values")
+```
+
+#### iii. Holt-Winters additive damped method
+
+This method incorporates trend and additive seasonality. Additionally, the effect of the trend component is dampened as observations are taken further into the past.
+
+```{r}
+# HW damped forecast
+gas.hwdamped <- hw(training.set, seasonal = "additive", damped = TRUE, h=60)
+summary(gas.hwdamped)
+
+# Fitting model to training set
+autoplot(training.set, series="Training set", xlab="Year", ylab="Price ($ per MMBtu)") +
+  autolayer(fitted(gas.hwdamped),
+            series="HW damped fitted values")
+```
+
+# 3 \| Discussion
+
+After the models have been trained with data from the training set, the models will be used to generate forecasts to be compared with the test set values to assess accuracy.
+
+## 3.1 \| Model comparison and validation
+
+Each of the models produced by different forecasting methods were compared to choose the best model among them.
+
+```{r}
+gas.naive.fc <- forecast(gas.naive, h=60)
+gas.naive.fc %>%
+  autoplot(xlab="Year", ylab="Price ($ per MMBtu)")+autolayer(test.set, series="Test set")
+```
+
+The naive method produces a flat line forecast using the last data point in the training set.
+
+```{r}
+gas.ses.fc <- forecast(gas.ses, h=60)
+gas.ses.fc %>%
+  autoplot(xlab="Year", ylab="Price ($ per MMBtu)")+autolayer(test.set, series="Test set")
+```
+
+Similarly, since the SES tends towards the naive forecast model, it produced a flat line forecast.
+
+```{r}
+gas.ets.fc <- forecast(gas.ets, h=60)
+gas.ets.fc %>%
+  autoplot(xlab="Year", ylab="Price ($ per MMBtu)")+autolayer(test.set, series="Test set")
+```
+
+The ETS(M,N,N) model produced another flat line forecast, but the confidence interval is now smaller compared to the SES and naive forecasts.
+
+```{r}
+gas.arima.fc <- forecast(gas.arima.4, h=60) 
+gas.arima.fc %>%
+  autoplot(xlab="Year", ylab="Price ($ per MMBtu)")+autolayer(test.set, series="Test set")
+accuracy(gas.arima.fc, test.set)
+```
+
+The ARIMA model generated a flat line forecast, which is not ideal for practical forecasting. This may be explained by the time series having weak seasonality and a non-monotonic trend, so the data does not have enough distinguishable patterns for ARIMA to model from sufficiently.
+
+The forecast generated by the ARIMA(1,0,1) model is seen below.
+
+``` {r}
+gas.arima.recfc <- forecast(gas.arima.5, h=60) 
+gas.arima.recfc %>%
+  autoplot(xlab="Year", ylab="Price ($ per MMBtu)")+autolayer(test.set, series="Test set")
+accuracy(gas.arima.recfc, test.set)
+```
+
+One can observe a forecast with its level moving away from the test set as time progresses, which proves that this model is not viable to use for forecasting with this dataset.
+
+```{r}
+gas.hl.fc <- forecast(gas.hl, h=60)
+gas.hl.fc %>%
+  autoplot(xlab="Year", ylab="Price ($ per MMBtu)")+autolayer(test.set, series="Test set")
+```
+
+The Holt's linear trend method produced a flat line forecast as expected of the non-monotonic and relatively level trend in the data.
+
+```{r}
+gas.hwreg.fc <- forecast(gas.hwreg, h=60) 
+gas.hwreg.fc %>%
+  autoplot(xlab="Year", ylab="Price ($ per MMBtu)")+autolayer(test.set, series="Test set")
+```
+
+The Holt-Winters' additive method attempted to capture the weak seasonality and trend, producing the following periodic forecast. The plot suggests that the forecast captured the three peaks near the end of the test set.
+
+```{r}
+gas.hwdamped.fc <- forecast(gas.hwdamped, h=60) 
+gas.hwdamped.fc %>%
+  autoplot(xlab="Year", ylab="Price ($ per MMBtu)")+autolayer(test.set, series="Test set")
+```
+
+The Holt-Winters' damped plot shows a smoother forecast, and similarly, it suggests that the forecast captured the three peaks near the end of the test set.
+
+After plotting the models, error metrics were inspected to check for accuracy.
+
+```{r}
+# Generating table of error metrics for all models
+fc.models <- list(gas.naive.fc, gas.ses.fc, gas.ets.fc, gas.arima.fc, gas.hl.fc, gas.hwreg.fc, gas.hwdamped.fc)
+fc.metrics <- data.frame()
+for(model in fc.models){
+  #Compute error metrics for the forecasting model
+  model.errors <- accuracy(model, test.set)
+  
+  #Summarize error metrics of the forecasting model
+  model.summary <- c(RMSE = model.errors[, "RMSE"]["Test set"],
+                     MAE = model.errors[, "MAE"]["Test set"],
+                     MPE = model.errors[, "MPE"]["Test set"],
+                     MAPE = model.errors[, "MAPE"]["Test set"])
+  
+  #Compile error metric summary in a single data frame
+  fc.metrics <- rbind(fc.metrics, model.summary)
+}
+
+#Naming rows and columns of error metric summary
+rownames(fc.metrics) <- c("Naive", "SES", "ETS", "ARIMA", "Holt's linear trend", "Holt-Winters additive", "Holt-Winters damped")
+colnames(fc.metrics) <- c("RMSE", "MAE", "MPE", "MAPE")
+
+#Printing error metric summary
+print(fc.metrics)
+```
+
+It can be observed that Holt-Winters damped method has the lowest values in RMSE, MAE, MPE, and MAPE among other methods. Thus, Holt-Winters Damped method was chosen to be the best model.
+
+Among the two methods under exponential smoothing (SES, ETS), the SES model showed better accuracy, while among the three Holt's methods, the Holt-Winters' damped additive model showed the best accuracy.
+
+The training set forecasts from the best models of each major model group are plotted into one graph. Notice that the ARIMA, naive, and SES models generate flat forecasts, while the Holt-Winters' damped additive model generates a forecast close to the test set values.
+
+```{r}
+# Plotting all forecasts
+autoplot(window(gas.ts, start=1997, end=c(2019, 12)))+
+  autolayer(gas.naive.fc$mean, series="Naive") + 
+  autolayer(gas.ses.fc$mean, series="SES") +
+  autolayer(gas.arima.fc$mean, series="ARIMA(1,1,1)") + 
+  autolayer(gas.hwdamped.fc$mean, series="Holt-Winters damped") +
+  labs(x="Year", y="Price ($ per MMBtu)", title="Natural gas prices in the US") +
+  guides(colour=guide_legend(title="Forecast"))
+```
+
+
+## 3.2 \| Forecasting with best model
+
+Holt-Winters Damped method was then applied to forecast the price of natural gas in 5 years, from January 2020 to December 2024. It can be observed in the graph that the price of natural gas peaks at the months of January and December with a level component of 2.7322. 
+
+```{r}
+# HW damped forecast
+gas.hwdamped <- hw(gas.ts, seasonal = "additive", damped = TRUE, h=60)
+
+#Forecast next 5 years of time series with HWDamped Method
+gas.5yr.fc <- forecast(gas.hwdamped, h=60)
+
+#Plot Forecast
+autoplot(gas.5yr.fc) +
+  ggtitle("Five-year Forecast for the Monthly Natural Gas Price using \n Holt-Winters Damped Method ") + theme(plot.title = element_text(hjust=0.5)) +
+  xlab("Year") +
+  ylab("$ per MMBtu")
+
+summary(gas.5yr.fc)
+```
+
+# 4 \| Conclusion
+
+This study applied several univariate time-series forecasting models for predicting natural gas prices using the U.S data. The data was collected from January 1997 to December 2019 and divided into two sets: a training set with 216 data points from January 1997 to December 2014, and a test set with 68 data points from January 2015 to December 2019 for evaluation of models. Using STL decomposition plot, the data exhibits a very weak seasonality and a non-monotonic trend. Several forecasting models were then applied and evaluated including Naïve forecasting, Exponential Smoothing (SES and ETS), ARIMA Models, and Holt's Method (Linear, Regular, and Holt-Winters Damped). These models were evaluated and checked their accuracy using error metrics: MAE, MPE, RMSE, and MAPE. Based on the error metrics, The Holt-Winters Damped method has the lowest error values, implying it is the best model for predicting natural gas prices. The Holt-Winters Damped method then provides an accurate forecast of the data based on the fitted values. This suggests that although the non-monotonic trend and the seasonality of the data was weak, these were still relevant factors to consider for forecasting natural gas prices.
+
+Furthermore, due to limited availability of records of natural gas prices in the Philippines, future studies can adapt the model used in this study to forecast Philippine data when it becomes available. To improve the accuracy of future forecasting models, explanatory variables that may affect natural gas prices such as economic statistics and weather conditions, may be considered.
+
+Overall, this study showed the significance of time-series forecasting models for studying natural gas prices. The findings provide valuable insights for stakeholders, government agencies and consumers in better decision-making and planning. Future studies may expand on these findings to develop more accurate and robust forecasting models for natural gas prices in the Philippines.
+
+# 5 \| References
+[1] “Philippines IEA.” 2021. [Online]. Available: https://www.iea.org/countries/philippines/natural-gas#how-is-natural-gas-used-in-philippines
+
+[2] “U.S. Energy Information Administration.” Jun. 2023. [Online]. Available: https://www.eia.gov/tools/faqs/faq.php?id=43&t=8
+
+# 6 \| R code
+``` {r echo=T, eval=F}
+library(fpp2, warn.conflicts=F, quietly=T) #for plotting time series
+library(stlplus, warn.conflicts=F, quietly=T) #for ts decomposition
+library(tidyverse, warn.conflicts=F, quietly=T) #for processing Excel files 
+library(tseries, warn.conflicts=F, quietly=T) #for ts functions
+
+# Importing .csv file data as time series
+raw <- read.csv("monthly_csv.csv")
+gas.ts <- ts(raw$Price, frequency=12, start=c(1997, 01), end=c(2019,12))
+autoplot(gas.ts, ylab="Price ($ per MMBtu)") +
+  ggtitle("Monthly Natural Gas Prices in the US")
+
+# Splitting data into training set (18 years; 216 months)
+# and test set (5 years; 60 months)
+training.set <- subset(gas.ts, end=216)
+test.set <- subset(gas.ts, start=217)
+
+# Seasonal plot for inspecting seasonality
+ggseasonplot(gas.ts) + 
+  ggtitle("Seasonal plot of time series") +
+  ylab("Price ($ per MMBtu)")
+
+# STL decomposition to inspect trend and seasonality
+gas.stl <- stlplus(gas.ts, s.window = "period")
+plot(gas.stl, main="STL decomposition of time series")
+# Weak seasonality, non-monotonic trend
+
+# Method 1: Naive forecast
+
+gas.naive <- naive(training.set, h=60)
+
+autoplot(training.set, series="Training set", xlab="Year", ylab="Price ($ per MMBtu)") +
+  autolayer(fitted(gas.naive),
+            series="Fitted values")
+
+# Method 2.a: Simple exponential smoothing
+gas.ses <- ses(training.set, h=60)
+
+# alpha = 0.9758; l_0 = 3.4192
+summary(gas.ses)
+# alpha is close to 1, thus, forecast is tending towards the naive method
+autoplot(training.set, series="Training set", xlab="Year", ylab="Price ($ per MMBtu)") +
+  autolayer(fitted(gas.ses),
+            series="Fitted values")
+
+# Method 2.b: ETS model
+gas.ets <- ets(training.set)
+
+summary(gas.ets)
+autoplot(training.set, series="Training set", xlab="Year", ylab="Price ($ per MMBtu)") +
+  autolayer(fitted(gas.ets),
+            series="Fitted values")
+
+# Method 3: ARIMA model
+# Checking stationarity using Augmented Dickey-Fuller (ADF) test
+adf.test(training.set)
+kpss.test(training.set, null="Trend")
+
+# Suggested lag order: 5
+# Test result: non-stationary
+# Performing first-order differencing
+gas.ts.d1 <- diff(training.set, differences = 1)
+
+# ADF test result: stationary; d=1
+adf.test(gas.ts.d1)
+kpss.test(gas.ts.d1, null="Trend")
+
+# Checking ACF and PACF plots to determine values of p and q
+forecast::tsdisplay(gas.ts.d1)
+
+# Testing combinations of ARIMA(p,d,q)
+
+# ACF suggests MA(5), PACF suggests AR(5)
+gas.arima.1 <- Arima(training.set, order = c(5,1,5))
+# ARIMA(5,1,5) has AICc value of 528.87
+gas.arima.1
+
+# p=5, q=1
+gas.arima.2 <- Arima(training.set, order = c(5,1,1))
+#ARIMA(5,1,1) has AICc value of 531.86
+gas.arima.2
+
+# p=1, q=5
+gas.arima.3 <- Arima(training.set, order = c(1,1,5))
+#ARIMA(1,1,5) has AICc value of 532.23
+gas.arima.3
+
+# Trial-and-error choice: p=1, q=1
+gas.arima.4 <- Arima(training.set, order = c(1,1,1))
+#ARIMA(1,1,1) has AICc value of 526.63
+gas.arima.4
+
+# ARIMA(1,1,1) produced lowest value of AICc; Fitting model to training set
+autoplot(training.set, series="Training set", xlab="Year", ylab="Price ($ per MMBtu)") +
+  autolayer(fitted(gas.arima.4),
+            series="Fitted values")
+
+# ARIMA model p=1, q=1 with no differencing as suggested by adviser
+gas.arima.5 <- Arima(training.set, order = c(1,0,1))
+#ARIMA(1,0,1) has AICc value of 531.34
+gas.arima.5
+
+# Method 4.a: Holt's linear trend method
+gas.hl <- holt(training.set, h=60)
+summary(gas.hl)
+
+# Fitting model to training set
+autoplot(training.set, series="Training set", xlab="Year", ylab="Price ($ per MMBtu)") +
+  autolayer(fitted(gas.hl),
+            series="Fitted values")
+
+# Method 4.b: Holt-Winters' additive
+gas.hwreg <- hw(training.set, seasonal = "additive", damped = FALSE, h=60)
+summary(gas.hwreg)
+
+# Fitting models to training set
+autoplot(training.set, series="Training set", xlab="Year", ylab="Price ($ per MMBtu)") +
+  autolayer(fitted(gas.hwreg),
+            series="HW fitted values")
+
+# Method 4.c: Holt-Winters' additive
+gas.hwdamped <- hw(training.set, seasonal = "additive", damped = TRUE, h=60)
+summary(gas.hwdamped)
+
+# Fitting model to training set
+autoplot(training.set, series="Training set", xlab="Year", ylab="Price ($ per MMBtu)") +
+  autolayer(fitted(gas.hwdamped),
+            series="HW damped fitted values")
+
+gas.naive.fc <- forecast(gas.naive, h=60)
+gas.naive.fc %>%
+  autoplot(xlab="Year", ylab="Price ($ per MMBtu)")+autolayer(test.set, series="Test set")
+
+gas.ses.fc <- forecast(gas.ses, h=60)
+gas.ses.fc %>%
+  autoplot(xlab="Year", ylab="Price ($ per MMBtu)")+autolayer(test.set, series="Test set")
+
+gas.ets.fc <- forecast(gas.ets, h=60)
+gas.ets.fc %>%
+  autoplot(xlab="Year", ylab="Price ($ per MMBtu)")+autolayer(test.set, series="Test set")
+
+gas.arima.fc <- forecast(gas.arima.4, h=60) 
+gas.arima.fc %>%
+  autoplot(xlab="Year", ylab="Price ($ per MMBtu)")+autolayer(test.set, series="Test set")
+accuracy(gas.arima.fc, test.set)
+
+gas.arima.recfc <- forecast(gas.arima.5, h=60) 
+gas.arima.recfc %>%
+  autoplot(xlab="Year", ylab="Price ($ per MMBtu)")+autolayer(test.set, series="Test set")
+accuracy(gas.arima.recfc, test.set)
+
+gas.hl.fc <- forecast(gas.hl, h=60)
+gas.hl.fc %>%
+  autoplot(xlab="Year", ylab="Price ($ per MMBtu)")+autolayer(test.set, series="Test set")
+
+gas.hwreg.fc <- forecast(gas.hwreg, h=60) 
+gas.hwreg.fc %>%
+  autoplot(xlab="Year", ylab="Price ($ per MMBtu)")+autolayer(test.set, series="Test set")
+
+gas.hwdamped.fc <- forecast(gas.hwdamped, h=60) 
+gas.hwdamped.fc %>%
+  autoplot(xlab="Year", ylab="Price ($ per MMBtu)")+autolayer(test.set, series="Test set")
+
+# Generating table of error metrics for all models
+fc.models <- list(gas.naive.fc, gas.ses.fc, gas.ets.fc, gas.arima.fc, gas.hl.fc, gas.hwreg.fc, gas.hwdamped.fc)
+fc.metrics <- data.frame()
+for(model in fc.models){
+  #Compute error metrics for the forecasting model
+  model.errors <- accuracy(model, test.set)
+  
+  #Summarize error metrics of the forecasting model
+  model.summary <- c(RMSE = model.errors[, "RMSE"]["Test set"],
+                     MAE = model.errors[, "MAE"]["Test set"],
+                     MPE = model.errors[, "MPE"]["Test set"],
+                     MAPE = model.errors[, "MAPE"]["Test set"])
+  
+  #Compile error metric summary in a single data frame
+  fc.metrics <- rbind(fc.metrics, model.summary)
+}
+
+#Naming rows and columns of error metric summary
+rownames(fc.metrics) <- c("Naive", "SES", "ETS", "ARIMA", "Holt's linear trend", "Holt-Winters additive", "Holt-Winters damped")
+colnames(fc.metrics) <- c("RMSE", "MAE", "MPE", "MAPE")
+
+#Printing error metric summary
+print(fc.metrics)
+
+# Plotting all forecasts
+autoplot(window(gas.ts, start=1997, end=c(2019, 12)))+
+  autolayer(gas.naive.fc$mean, series="Naive") + 
+  autolayer(gas.ses.fc$mean, series="SES") +
+  autolayer(gas.arima.fc$mean, series="ARIMA(1,1,1)") + 
+  autolayer(gas.hwdamped.fc$mean, series="Holt-Winters damped") +
+  labs(x="Year", y="Price ($ per MMBtu)", title="Natural gas prices in the US") +
+  guides(colour=guide_legend(title="Forecast"))
+
+# HW damped forecast
+gas.hwdamped <- hw(gas.ts, seasonal = "additive", damped = TRUE, h=60)
+
+#Forecast next 5 years of time series with HWDamped Method
+gas.5yr.fc <- forecast(gas.hwdamped, h=60)
+
+#Plot Forecast
+autoplot(gas.5yr.fc) +
+  ggtitle("Five-year Forecast for the Monthly Natural Gas Price using \n Holt-Winters Damped Method ") + theme(plot.title = element_text(hjust=0.5)) +
+  xlab("Year") +
+  ylab("$ per MMBtu")
+
+summary(gas.5yr.fc)
+```
